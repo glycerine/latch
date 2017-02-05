@@ -1,4 +1,66 @@
 /*
+
+the latch proposal (latch would be a new type in Go)
+----------------------------------------------------
+
+   // creation syntax is backwards compatible with Go 1
+   //
+   // Only change: now -1 can be passed as the channel size.
+   //
+   latch := make(chan int, -1)
+
+   <-latch    // this read would block. the latch is open by default.
+
+   close(latch) // now the latch always returns 0, just like a channel.
+
+   // writes are allowed after close.
+   // close can be called multiple times.
+   // writes to a latch never block.
+   // reads to a latch block if the latch is open.
+   //
+   latch <- 3 // now latch always returns 3.
+
+   // each of these returns 3 immediately (no blocking)
+   three := <- latch
+   tres  := <- latch
+   trois := <- latch
+
+   latch <- 2 // now all readers see 2
+
+   // each of these returns 2 immediately (no blocking)
+   two  := <- latch
+   dos  := <- latch
+   deux := <- latch
+
+   // without an open() operation, how do we open a latch?
+   latch <- 0 // writing the zero-value would open the latch.
+
+   select {
+     case <-latch:    // this now blocks, because the latch is "open".
+     default:
+        fmt.Printf("opened latches block") // this would print.
+   }
+
+   // this would "close" the latch again; all readers would see 1.
+   latch <- 1
+
+   close(latch) // now the latch returns the zero-value all the time, immediately: this is just like a regular channel.
+
+   // since there is no open keyword, we
+   // define writing the zero value to mean open
+   // the latch, and define close(latch) to
+   // mean write the zero-value to the latch.
+   // A little strange, but preserves backwards
+   // compatiblity with Go 1.
+   //
+   latch <- 0  // now the latch would block readers, because it is in "open" state.
+
+Note: It would be preferred to have an `open(latch)` syntax, but
+that is deferred because it requires a new language keyword.
+
+background
+----------
+
 Latch explores the question: what if
 Go channels could be closed multiple
 times, and be provided with a value
@@ -64,15 +126,15 @@ import (
 //
 // What if we had a channel
 //
-//  - that could be closed more than once.
+// * that could be closed more than once.
 //
-//  - that could be re-opened.
+// * that could be re-opened.
 //
-//  - that could convey a default value
-//     once they are closed.
+// * that could convey a default value
+// once they are closed.
 //
-//  - that didn't need a background
-//    goroutine to service it.
+// * that didn't need a background
+// goroutine to service it.
 //
 // To create a Latch, we will
 // leverage the property of buffered channels:
