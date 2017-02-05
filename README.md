@@ -29,7 +29,7 @@ The library code here provides a working latch prototype. It is
 not as efficient or as type safe as a built-in latch would be.
 
 ~~~
-   // make a new (open) latch:
+   // make a new latch:
    //
    // define runtime.CreateLatch(bc) that takes a buffered
    // channel bc and returns a latch that uses the bc
@@ -177,3 +177,176 @@ This is free and unencumbered software released into the public domain
 by author Jason E. Aten, Ph.D.
 
 See the unlicense text in the LICENSE file.
+
+-----
+code
+
+~~~
+package latch
+
+import (
+	"sync"
+	"time"
+)
+
+// A Latch is a channel that broadcasts a *Packet value,
+// without knowing who will receive it.
+// All readers will read the Bcast() value.
+type Latch struct {
+	sz    int
+	mut   sync.Mutex
+	cur   *Packet
+	ch    chan *Packet
+	avail bool // when avail==true, <- receives on Ch() will be given cur.
+
+	fillerStop chan struct{}
+}
+
+// Packet conveys either a data Item,
+// or an Err (or, possibly, both).
+type Packet struct {
+	Item interface{}
+	Err  error
+}
+
+// NewLatch makes a new latch with
+// backing channel of size sz.
+func NewLatch(sz int) *Latch {
+	return &Latch{
+		ch: make(chan *Packet, sz),
+		sz: sz,
+	}
+}
+
+// Ch returns a read-only channel. This is
+// on purpose -- we want to prevent
+// anyone from putting values
+// into the channel by means other than
+// calling Bcast().
+func (r *Latch) Ch() <-chan *Packet {
+	return r.ch
+}
+
+// clients should call Clear(), not drain() directly.
+// Internal callers should be holding the r.mut already.
+func (r *Latch) drain() {
+	if len(r.ch) == 0 {
+		return
+	}
+	// safe for concurrent reads; in
+	// case a client happens to be reading
+	// now, we don't want to block inside drain().
+	for {
+		select {
+		case <-r.ch:
+		default:
+			return
+		}
+	}
+}
+
+// Bcast can be called multiple times, with
+// different values of pak. Each call will
+// drain the ch channel of any prior data,
+// any replace it will sz copies of pak.
+// The sz value was set during NewLatch(sz).
+func (r *Latch) Bcast(pak *Packet) {
+	r.mut.Lock()
+	r.cur = pak
+	r.drain() // drop any old values.
+	r.avail = true
+	for i := 0; i < r.sz; i++ {
+		r.ch <- r.cur
+	}
+	r.mut.Unlock()
+}
+
+// Refresh "tops-up" a available channel. Since
+// the channel is of finite size, and
+// we don't want to waste a background
+// goroutine (for speed and space), clients
+// can regularly call Refresh to make sure
+// an in-use (Bcast called) channel still has copies
+// of data. Otherwise, after sz accesses,
+// receivers on Ch() will block.
+//
+// If you want absolute correctness, and
+// can't be bothered with invoking Refresh()
+// regularly to service your available channel,
+// call BackgroundRefresher() once instead.
+//
+func (r *Latch) Refresh() {
+	r.mut.Lock()
+	if r.avail {
+		for len(r.ch) < r.sz {
+			r.ch <- r.cur
+		}
+	}
+	r.mut.Unlock()
+}
+
+// BackgroundRefresher starts a goroutine
+// that tops-up your available channel
+// every 500msec. It will prevent
+// starvation if you have lots of consumers;
+// at the cost of using a goroutine and
+// possibly slowing down your whole program.
+//
+// Efficiency minded clients should arrange
+// to themselves invoke Refresh() regularly
+// instead if at all possible; (and of course,
+// only if required). We expect the need for
+// BackgroundRefresher to be rare. Refresh
+// and BackgroundRefresher are needed only
+// is only if the number reads will
+// exceed sz or cannot be known in advance.
+// When using Latch as a termination
+// signal, for instance, sz is typically
+// bounded by the number of clients of
+// those goroutines that are being shutdown.
+//
+func (r *Latch) BackgroundRefresher() {
+	r.mut.Lock()
+	defer r.mut.Unlock()
+	if r.fillerStop == nil {
+		r.fillerStop = make(chan struct{})
+		go func() {
+			for {
+				select {
+				case <-r.fillerStop:
+					return
+				case <-time.After(500 * time.Millisecond):
+					r.Refresh()
+				}
+			}
+		}()
+	}
+}
+
+// Stop tells any BackgroundRefresher goroutine
+// to shut down.
+func (r *Latch) Stop() {
+	r.mut.Lock()
+	defer r.mut.Unlock()
+	if r.fillerStop != nil {
+		// only close it once.
+		select {
+		case <-r.fillerStop:
+		default:
+			close(r.fillerStop)
+		}
+	}
+}
+
+// Clear drains the latch, emptying
+// it of any values stored. After
+// we return, receivers on Ch()
+// will block until somebody
+// calls Close().
+func (r *Latch) Clear() {
+	r.mut.Lock()
+	r.drain()
+	r.avail = false
+	r.mut.Unlock()
+}
+~~~

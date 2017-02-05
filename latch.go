@@ -30,7 +30,7 @@ The library code here provides a working latch prototype. It is
 not as efficient or as type safe as a built-in latch would be.
 
 ~~~
-   // make a new (open) latch:
+   // make a new latch:
    //
    // define runtime.CreateLatch(bc) that takes a buffered
    // channel bc and returns a latch that uses the bc
@@ -54,7 +54,9 @@ not as efficient or as type safe as a built-in latch would be.
    // Writes to the latch have the effect of emptying
    // backit followed by a single write (send) to backit.
 
-   latch <- 4 // equivalent to: for len(backit) > 0 { <-backit}; backit <- 4
+   // equivalent to the atomic
+   // execution of: for len(backit) > 0 { <-backit}; backit <- 4
+   latch <- 4
 
    // we can read as much as we like:
    fmt.Printf("%v\n", <-latch) // printf "4"
@@ -117,7 +119,15 @@ using channels anyway. Typical
 use case is for coordinating
 shutdown or restart of a subsystem.
 Go's channels are just somewhat awkward
-for this purpose.
+for this purpose. I'm constantly
+tip-toe-ing around the lack of
+support for close()-ing more than
+once. I was inspired to write a library just to
+make multiple-closes not crash. It improves
+usability some, but latches would
+be even better.
+(See https://github.com/glycerine/idem
+for that library).
 
 A latch holds its value, for as
 many readers as want to see it.
@@ -176,31 +186,15 @@ import (
 	"time"
 )
 
-// Latch: value-broadcasting channels
-//
-// What if we had a channel
-//
-// * that could be closed more than once.
-//
-// * that could be re-opened.
-//
-// * that could convey a default value
-// once they are closed.
-//
-// * that didn't need a background
-// goroutine to service it.
-//
-// To create a Latch, we will
-// leverage the property of buffered channels:
-//  even though they are buffered, they block
-//  *until* they have something in them.
-//
+// A Latch is a channel that broadcasts a *Packet value,
+// without knowing who will receive it.
+// All readers will read the Bcast() value.
 type Latch struct {
-	sz     int
-	mut    sync.Mutex
-	cur    *Packet
-	ch     chan *Packet
-	closed bool // when closed==true, <- receives on Ch() will be given cur.
+	sz    int
+	mut   sync.Mutex
+	cur   *Packet
+	ch    chan *Packet
+	avail bool // when avail==true, <- receives on Ch() will be given cur.
 
 	fillerStop chan struct{}
 }
@@ -212,7 +206,8 @@ type Packet struct {
 	Err  error
 }
 
-// NewLatch
+// NewLatch makes a new latch with
+// backing channel of size sz.
 func NewLatch(sz int) *Latch {
 	return &Latch{
 		ch: make(chan *Packet, sz),
@@ -220,7 +215,7 @@ func NewLatch(sz int) *Latch {
 	}
 }
 
-// returns a read-only channel. This is
+// Ch returns a read-only channel. This is
 // on purpose -- we want to prevent
 // anyone from putting values
 // into the channel by means other than
@@ -251,19 +246,19 @@ func (r *Latch) drain() {
 // different values of pak. Each call will
 // drain the ch channel of any prior data,
 // any replace it will sz copies of pak.
-//
+// The sz value was set during NewLatch(sz).
 func (r *Latch) Bcast(pak *Packet) {
 	r.mut.Lock()
 	r.cur = pak
 	r.drain() // drop any old values.
-	r.closed = true
+	r.avail = true
 	for i := 0; i < r.sz; i++ {
 		r.ch <- r.cur
 	}
 	r.mut.Unlock()
 }
 
-// Refresh "tops-up" a closed channel. Since
+// Refresh "tops-up" a available channel. Since
 // the channel is of finite size, and
 // we don't want to waste a background
 // goroutine (for speed and space), clients
@@ -274,12 +269,12 @@ func (r *Latch) Bcast(pak *Packet) {
 //
 // If you want absolute correctness, and
 // can't be bothered with invoking Refresh()
-// regularly to service your closed channel,
+// regularly to service your available channel,
 // call BackgroundRefresher() once instead.
 //
 func (r *Latch) Refresh() {
 	r.mut.Lock()
-	if r.closed {
+	if r.avail {
 		for len(r.ch) < r.sz {
 			r.ch <- r.cur
 		}
@@ -288,7 +283,7 @@ func (r *Latch) Refresh() {
 }
 
 // BackgroundRefresher starts a goroutine
-// that tops-up your Closed channel
+// that tops-up your available channel
 // every 500msec. It will prevent
 // starvation if you have lots of consumers;
 // at the cost of using a goroutine and
@@ -348,6 +343,6 @@ func (r *Latch) Stop() {
 func (r *Latch) Clear() {
 	r.mut.Lock()
 	r.drain()
-	r.closed = false
+	r.avail = false
 	r.mut.Unlock()
 }
