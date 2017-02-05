@@ -25,8 +25,11 @@ What if we had a channel:
 
 We call this a latch.
 
-The library code here provides a working latch prototype. It is
+The library code here provides a latch prototype to
+help the reader's comprehension. It is
 not as efficient or as type safe as a built-in latch would be.
+It also risks correctness and efficiency when the number
+of receivers is not known and fixed in advance.
 See the code at the bottom for that prototype, which only
 approximates the desired semantics.
 
