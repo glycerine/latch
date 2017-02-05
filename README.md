@@ -116,7 +116,15 @@ using channels anyway. Typical
 use case is for coordinating
 shutdown or restart of a subsystem.
 Go's channels are just somewhat awkward
-for this purpose.
+for this purpose. I'm constantly
+tip-toe-ing around the lack of
+support for close()-ing more than
+once. I was inspired to write a library just to
+make multiple-closes not crash. It improves
+channels work, but latches would
+be even better.
+(See https://github.com/glycerine/idem
+for that library).
 
 A latch holds its value, for as
 many readers as want to see it.
