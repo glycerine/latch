@@ -342,7 +342,7 @@ func (r *Latch) Stop() {
 // it of any values stored. After
 // we return, receivers on Ch()
 // will block until somebody
-// calls Close().
+// calls Bcast().
 func (r *Latch) Clear() {
 	r.mut.Lock()
 	r.drain()
