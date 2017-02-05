@@ -35,7 +35,7 @@ not as efficient or as type safe as a built-in latch would be.
    // channel bc and returns a latch that uses the bc
    // as its data source.
    //
-   backit := make(chan int, 2)
+   backit := make(chan int, 1)
    latch := runtime.CreateLatch(backit)
 
    // both backit and latch can still be accessed.
