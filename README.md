@@ -14,13 +14,15 @@ systems that may be selecting on the old instance of that channel.
 
 What if we had a channel:
 
-* that could convey different values once they are closed.
+* that could broadcast different values;
 
-* that could be closed more than once.
+* that were space-efficient (the `latch` library here is wasteful; we use a fixed size non-blocking channel);
 
-* that could be re-opened more than once.
+* that didn't need a background goroutine to service it for correctness; releiving the need to know how many subscribers a latch had;
 
-* that didn't need a background goroutine to service it.
+* that could be closed more than once, in order to change its value;
+
+* and that could be opened more than once, in order to suspend broadcast.
 
 I call this a latch.
 
