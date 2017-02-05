@@ -1,14 +1,15 @@
 /*
-the latch proposal (latch would be a new type in Go)
+the latched channel proposal
 ----------------------------------------------------
 
 2017 February 5
 
-A latch is like a channel that broadcasts a user-defined
-value. Broadcasts can be done by closing channels in Go, but they
+A latched channel is a channel that supports
+broadcast of a user-defined value. Broadcasts
+can be done by closing regular channels in Go, but they
 can only convey a single bit: the zero-value or blocked (still open).
 
-Moreover the channel cannot be efficiently re-used, and
+Moreover the regular channel cannot be efficiently re-used, and
 we must create load on the garbage collector by re-making
 channels if we want to broadcast again; and even then
 correctness is hard because we must shutdown all sub-
@@ -24,7 +25,7 @@ What if we had a channel:
 
 * that could be emptied to suspend broadcast.
 
-We call this a latch.
+We call this a latched channel. Or latch for short.
 
 The library code here provides a latch prototype to
 help the reader's comprehension. It is
@@ -35,15 +36,17 @@ See the code at the bottom for that prototype, which only
 approximates the desired semantics.
 
 The following example shows how the proposed additional built-in
-`latch` type would work. A latch would be a channel with an extra bit
-set internally that makes reads idempotent and tells the latch to
-share its backing store.
+latched channel type would work. A latch would be a channel but
+with an extra bit set internally that makes reads idempotent and tells the latch to
+share its backing store with a regular channel.
 
 ~~~
-   // make a new latch:
+   // Proposed usage (ideal; not possible today):
+   //
+   // make a new latched channel:
    //
    // define runtime.CreateLatch(bc) that takes a buffered
-   // channel bc and returns a latch that uses the bc
+   // channel bc and returns a latched channel that uses the bc
    // as its data source.
    //
    backit := make(chan int, 1)
@@ -139,9 +142,9 @@ be even better.
 (See https://github.com/glycerine/idem
 for that library).
 
-A latch holds its value, for as
+A latched channel holds its value, for as
 many readers as want to see it.
-The owner can empty the latch, which
+The owner can empty the latched channel, which
 means that readers will block.
 An empty latch is like an empty
 channel. Both block receivers.
@@ -156,7 +159,7 @@ we make them work at some cost in
 space and time efficiency.
 
 It would be great to be able to have
-actual latch type in Go, so that space and time
+actual latched channel type in Go, so that space and time
 could be optimal.
 
 The advantage of having this built
@@ -196,7 +199,7 @@ import (
 	"time"
 )
 
-// A Latch is a channel that broadcasts a *Packet value,
+// A latch channel is a channel that broadcasts a *Packet value,
 // without knowing who will receive it.
 // All readers will read the Bcast() value.
 type Latch struct {

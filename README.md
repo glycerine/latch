@@ -1,13 +1,14 @@
-the latch proposal (latch would be a new type in Go)
+the latched channel proposal
 ----------------------------------------------------
 
 2017 February 5
 
-A latch is like a channel that broadcasts a user-defined
-value. Broadcasts can be done by closing channels in Go, but they
+A latched channel is a channel that supports
+broadcast of a user-defined value. Broadcasts
+can be done by closing regular channels in Go, but they
 can only convey a single bit: the zero-value or blocked (still open).
 
-Moreover the channel cannot be efficiently re-used, and
+Moreover the regular channel cannot be efficiently re-used, and
 we must create load on the garbage collector by re-making
 channels if we want to broadcast again; and even then
 correctness is hard because we must shutdown all sub-
@@ -23,7 +24,7 @@ What if we had a channel:
 
 * that could be emptied to suspend broadcast.
 
-We call this a latch.
+We call this a latched channel. Or latch for short.
 
 The library code here provides a latch prototype to
 help the reader's comprehension. It is
@@ -34,9 +35,9 @@ See the code at the bottom for that prototype, which only
 approximates the desired semantics.
 
 The following example shows how the proposed additional built-in
-`latch` type would work. A latch would be a channel with an extra bit
-set internally that makes reads idempotent and tells the latch to
-share its backing store.
+latched channel type would work. A latch would be a channel but
+with an extra bit set internally that makes reads idempotent and tells the latch to
+share its backing store with a regular channel.
 
 ~~~
    // Proposed usage (ideal; not possible today):
