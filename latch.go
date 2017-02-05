@@ -3,6 +3,33 @@
 the latch proposal (latch would be a new type in Go)
 ----------------------------------------------------
 
+2017 February 5
+
+A latch is like a channel that broadcasts a user-defined
+value. Broadcasts can be done by closing channels in Go, but they
+can only convey a single bit: the zero-value or blocked (still open).
+Moreover the channel cannot be efficiently re-used, and
+we must create load on the garbage collector by re-making
+channels if we want to broadcast again; and even then
+correctness is hard because we must shutdown all sub-
+systems that may be selecting on the old that channel.
+
+What if we had a channel:
+
+* that could convey different values once they are closed.
+
+* that could be closed more than once.
+
+* that could be re-opened more than once.
+
+* that didn't need a background goroutine to service it.
+
+I call this a latch.
+
+The library code here provides a working latch prototype. It is
+not as efficient or as type safe as built-in latch.
+
+
    // creation syntax is backwards compatible with Go 1
    //
    // Only change: now -1 can be passed as the channel size.
@@ -122,7 +149,7 @@ import (
 	"time"
 )
 
-// Latch: rethinking channels
+// Latch: value-broadcasting channels
 //
 // What if we had a channel
 //
