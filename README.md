@@ -6,6 +6,7 @@ the latch proposal (latch would be a new type in Go)
 A latch is like a channel that broadcasts a user-defined
 value. Broadcasts can be done by closing channels in Go, but they
 can only convey a single bit: the zero-value or blocked (still open).
+
 Moreover the channel cannot be efficiently re-used, and
 we must create load on the garbage collector by re-making
 channels if we want to broadcast again; and even then
@@ -16,37 +17,57 @@ What if we had a channel:
 
 * that could broadcast different values;
 
-* that were space-efficient (the `latch` library here is wasteful; we use a fixed size non-blocking channel);
+* that was space-efficient;
 
-* that didn't need a background goroutine to service it for correctness; releiving the need to know how many subscribers a latch had;
+* that didn't need a background goroutine to service it for correctness; to relieve the need to know how many subscribers a latch had or will have in the future;
 
-* that could be closed more than once, in order to change its value;
+* that could be emptied to suspend broadcast.
 
-* and that could be opened more than once, in order to suspend broadcast.
-
-I call this a latch.
+We call this a latch.
 
 The library code here provides a working latch prototype. It is
-not as efficient or as type safe as built-in latch.
+not as efficient or as type safe as a built-in latch would be.
 
 ~~~
-   // creation syntax is backwards compatible with Go 1
+   // make a new (open) latch:
    //
-   // Only change: now -1 can be passed as the channel size.
+   // define runtime.CreateLatch(bc) that takes a buffered
+   // channel bc and returns a latch that uses the bc
+   // as its data source.
    //
-   latch := make(chan int, -1)
+   backit := make(chan int, 2)
+   latch := runtime.CreateLatch(backit)
 
-   <-latch    // this read would block. the latch is open by default.
+   // both backit and latch can still be accessed.
+   // The latch uses backit as its backing data.
 
-   close(latch) // now the latch always returns 0, just like a channel.
+   // The only difference is: receives on latch don't actually
+   // remove anything from backit.
 
-   // writes are allowed after close.
-   // close can be called multiple times.
-   // writes to a latch never block.
-   // reads to a latch block if the latch is open.
-   //
-   latch <- 3 // now latch always returns 3.
+   // Receives on latch
+   // always return the data that would be received from backit.
 
+   // Receives on latch block if backit is empty, just as a
+   // receive on backit would.
+
+   // Writes to the latch have the effect of emptying
+   // backit followed by a single write (send) to backit.
+
+   latch <- 4 // equivalent to: for len(backit) > 0 { <-backit}; backit <- 4
+
+   // we can read as much as we like:
+   fmt.Printf("%v\n", <-latch) // printf "4"
+   fmt.Printf("%v\n", <-latch) // printf "4"
+   fmt.Printf("%v\n", <-latch) // printf "4"
+
+   // emptying backit will empty latch
+   f := <-backit 
+   assert(f == 4)
+
+   <-latch // blocks, now empty buffer behind the channel.
+
+   latch <- 3
+   
    // each of these returns 3 immediately (no blocking)
    three := <- latch
    tres  := <- latch
@@ -59,33 +80,19 @@ not as efficient or as type safe as built-in latch.
    dos  := <- latch
    deux := <- latch
 
-   // without an open() operation, how do we open a latch?
-   latch <- 0 // writing the zero-value would open the latch.
+   // forget any stored value, by reading the one value out of the backing backit.
+   <-backit
 
    select {
-     case <-latch:    // this now blocks, because the latch is "open".
+     case <-latch:    // this now blocks, because the backing queue is empty
      default:
-        fmt.Printf("opened latches block") // this would print.
+        fmt.Printf("empty latches block") // this would print.
    }
 
-   // this would "close" the latch again; all readers would see 1.
-   latch <- 1
-
-   close(latch) // now the latch returns the zero-value all the time, immediately: this is just like a regular channel.
-
-   // since there is no open keyword, we
-   // define writing the zero value to mean open
-   // the latch, and define close(latch) to
-   // mean write the zero-value to the latch.
-   // A little strange, but preserves backwards
-   // compatiblity with Go 1.
-   //
-   latch <- 0  // now the latch would block readers, because it is in "open" state.
-
+   
 ~~~
 
-Note: It would be preferred to have an `open(latch)` syntax, but
-that is deferred because it requires a new language keyword.
+
 
 background
 ----------
@@ -93,10 +100,14 @@ background
 https://godoc.org/github.com/glycerine/latch
 
 Latch explores the question: what if
-Go channels could be closed multiple
-times, and be provided with a value
-other than the zero value, as their
-"closed" value.
+Go channels could be used to broadcast
+more than a single bit?
+
+Image a channel that could send to multiple readers
+a single current value, without having
+to know how many readers there are. Imagine
+being able to change that value without
+destroying and re-creating all receiving structures.
 
 Such channels would act like latches.
 
@@ -104,15 +115,17 @@ This is half of how I end up
 using channels anyway. Typical
 use case is for coordinating
 shutdown or restart of a subsystem.
+Go's channels are just somewhat awkward
+for this purpose.
 
 A latch holds its value, for as
-many readers as want to see it, for
-as long as the writer wishes. The
-user can open the latch, which
-means that it is empty and readers
-will block like an open size-0 channel
-with no current writers. The
-user can also write a new value
+many readers as want to see it.
+The owner can empty the latch, which
+means that readers will block.
+An empty latch is like an empty
+channel. Both block receivers.
+
+The user can also write a new value
 to the latch, which will replace
 the old value for all subsequent
 reads.
@@ -123,28 +136,30 @@ space and time efficiency.
 
 It would be great to be able to have
 actual latch type in Go, so that space and time
-could be optimal. This could be as simple
-as taking -1 as the size of the channel to
-indicate that the channel is a latch.
-Such a change would be backwards
-compatible, because no current correct
-Go programs can use a size of -1.
+could be optimal.
 
 The advantage of having this built
 into the language would be
 type safety (intead of using interface{}
 in Packet), and efficiency (no
-need to run a background goroutine);
-both time efficiency( no need to wait
+need to run a background goroutine).
+
+Also, time efficiency would be improved
+because there would be no need to wait
 for the background goroutine to wake
-up to service all your reads), and
-space efficiency: no need to allocate
-a bunch of sz slots in your channel,
-when you only need one. There would
-be less load on the Garbage Collector
+up to service all your reads. 
+
+Space efficiency would be improved
+by not having a need to allocate
+a bunch of slots in the non-blocking sized channel,
+as we do in the prototype library.
+
+There would be less load on the Go
+garbage collector
 as a result of not having to discard
 and re-make already closed channels
-and sub-systems.
+and the structs/sub-systems that use
+those channels receiving broadcasts.
 
 ----
 
