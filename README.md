@@ -53,7 +53,9 @@ not as efficient or as type safe as a built-in latch would be.
    // Writes to the latch have the effect of emptying
    // backit followed by a single write (send) to backit.
 
-   latch <- 4 // equivalent to: for len(backit) > 0 { <-backit}; backit <- 4
+   // equivalent to the atomic
+   // execution of: for len(backit) > 0 { <-backit}; backit <- 4
+   latch <- 4 
 
    // we can read as much as we like:
    fmt.Printf("%v\n", <-latch) // printf "4"
