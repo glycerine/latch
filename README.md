@@ -56,3 +56,10 @@ be less load on the Garbage Collector
 as a result of not having to discard
 and re-make already closed channels
 and sub-systems.
+
+----
+
+This is free and unencumbered software released into the public domain
+by author Jason E. Aten, Ph.D.
+
+See the unlicense text in the LICENSE file.
