@@ -15,7 +15,7 @@ func TestLatch(t *testing.T) {
 	}
 
 	aligator := &Packet{Item: "bill"}
-	latch.Close(aligator)
+	latch.Bcast(aligator)
 
 	for j := 0; j < 3; j++ {
 		if j > 0 {
@@ -25,7 +25,7 @@ func TestLatch(t *testing.T) {
 			select {
 			case b := <-latch.Ch():
 				if b != aligator {
-					t.Fatal("Close(aligator) means aligator should always be read on the latch")
+					t.Fatal("Bcast(aligator) means aligator should always be read on the latch")
 				}
 			default:
 				t.Fatal("latch is now closed, should have read back aligator. Refresh should have restocked us.")
@@ -35,7 +35,7 @@ func TestLatch(t *testing.T) {
 
 	// multiple closes are fine:
 	crocadile := &Packet{Item: "lyle"}
-	latch.Close(crocadile)
+	latch.Bcast(crocadile)
 
 	for j := 0; j < 3; j++ {
 		if j > 0 {
@@ -45,7 +45,7 @@ func TestLatch(t *testing.T) {
 			select {
 			case b := <-latch.Ch():
 				if b != crocadile {
-					t.Fatal("Close(crocadile) means crocadile should always be read on the latch")
+					t.Fatal("Bcast(crocadile) means crocadile should always be read on the latch")
 				}
 			default:
 				t.Fatal("latch is now closed, should have read back crocadile. Refresh should have restocked us.")
@@ -53,11 +53,11 @@ func TestLatch(t *testing.T) {
 		}
 	}
 
-	// and after Open, we should block
-	latch.Open()
+	// and after Clear, we should block
+	latch.Clear()
 	select {
 	case <-latch.Ch():
-		t.Fatal("Open() means she should have blocked.")
+		t.Fatal("Clear() means recevie should have blocked.")
 	default:
 		// ok, good.
 	}

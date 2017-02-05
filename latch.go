@@ -224,12 +224,12 @@ func NewLatch(sz int) *Latch {
 // on purpose -- we want to prevent
 // anyone from putting values
 // into the channel by means other than
-// calling Close().
+// calling Bcast().
 func (r *Latch) Ch() <-chan *Packet {
 	return r.ch
 }
 
-// clients should call Open(), not drain() directly.
+// clients should call Clear(), not drain() directly.
 // Internal callers should be holding the r.mut already.
 func (r *Latch) drain() {
 	if len(r.ch) == 0 {
@@ -247,19 +247,12 @@ func (r *Latch) drain() {
 	}
 }
 
-// Close is like closing an electrical circuit;
-// closing the circuit
-// allows current (data) to flow. The
-// opposite, Open, halts and blocks flow.
-// The nature of the data that flows
-// is copies of pak.
-//
-// Close can be called multiple times, with
+// Bcast can be called multiple times, with
 // different values of pak. Each call will
 // drain the ch channel of any prior data,
 // any replace it will sz copies of pak.
 //
-func (r *Latch) Close(pak *Packet) {
+func (r *Latch) Bcast(pak *Packet) {
 	r.mut.Lock()
 	r.cur = pak
 	r.drain() // drop any old values.
@@ -275,7 +268,7 @@ func (r *Latch) Close(pak *Packet) {
 // we don't want to waste a background
 // goroutine (for speed and space), clients
 // can regularly call Refresh to make sure
-// an Close()-ed channel still has copies
+// an in-use (Bcast called) channel still has copies
 // of data. Otherwise, after sz accesses,
 // receivers on Ch() will block.
 //
@@ -347,11 +340,12 @@ func (r *Latch) Stop() {
 	}
 }
 
-// Open drains the latch. After
+// Clear drains the latch, emptying
+// it of any values stored. After
 // we return, receivers on Ch()
 // will block until somebody
 // calls Close().
-func (r *Latch) Open() {
+func (r *Latch) Clear() {
 	r.mut.Lock()
 	r.drain()
 	r.closed = false
