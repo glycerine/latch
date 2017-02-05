@@ -121,7 +121,7 @@ tip-toe-ing around the lack of
 support for close()-ing more than
 once. I was inspired to write a library just to
 make multiple-closes not crash. It improves
-channels work, but latches would
+usability some, but latches would
 be even better.
 (See https://github.com/glycerine/idem
 for that library).
