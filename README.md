@@ -10,7 +10,7 @@ Moreover the channel cannot be efficiently re-used, and
 we must create load on the garbage collector by re-making
 channels if we want to broadcast again; and even then
 correctness is hard because we must shutdown all sub-
-systems that may be selecting on the old that channel.
+systems that may be selecting on the old instance of that channel.
 
 What if we had a channel:
 
