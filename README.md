@@ -8,7 +8,7 @@ broadcast of a user-defined value. Broadcasts
 can be done by closing regular channels in Go, but they
 can only convey a single bit: the zero-value or blocked (still open).
 
-Moreover the regular channel cannot be efficiently re-used, and
+Moreover after broadcast the regular channel cannot be efficiently re-used, and
 we must create load on the garbage collector by re-making
 channels if we want to broadcast again; and even then
 correctness is hard because we must shutdown all sub-
@@ -36,8 +36,9 @@ approximates the desired semantics.
 
 The following example shows how the proposed additional built-in
 latched channel type would work. A latch would be a channel but
-with an extra bit set internally that makes reads idempotent and tells the latch to
-share its backing store with a regular channel.
+with an extra bit set internally that makes reads non-consuming
+and tells the latch to share its backing store with a regular
+buffered channel.
 
 ~~~
    // Proposed usage (ideal; not possible today):
