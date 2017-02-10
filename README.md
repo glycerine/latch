@@ -1,6 +1,14 @@
 the latched channel proposal
 ----------------------------------------------------
 
+2017 February 10
+
+Based on a new idea: having the receiver do the
+the maintenance on the channel, I believe I have
+solved this problem in existing Go. See the file reload.go
+for an example implementation.
+
+
 2017 February 5
 
 A latched channel is a channel that supports
