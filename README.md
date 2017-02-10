@@ -5,9 +5,9 @@ the latched channel proposal
 
 Based on a new idea: having the receiver do the
 the maintenance on the channel, I believe I have
-solved this problem in existing Go. See the file reload.go
-for an example implementation.
+solved this problem in existing Go.
 
+See https:///github.com/glycerine/bchan and https://godoc.org/github.com/glycerine/bchan
 
 2017 February 5
 
